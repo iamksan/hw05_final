@@ -2,11 +2,15 @@ from django.http import Http404
 from django.contrib.auth import get_user_model
 from django.shortcuts import get_object_or_404
 from django.test import TestCase, Client
+from django.conf import settings
+
 from ..models import Post, Group, Comment, Follow
+
 from django.urls import reverse
 from django import forms
 from django.core.cache import cache
 
+TEST_OF_POST: int = 13
 User = get_user_model()
 
 
@@ -234,21 +238,44 @@ class PostsPagesTests(TestCase):
         is_edit = response.context.get('is_edit')
         self.assertTrue(is_edit)
 
-    def test_first_page_contains_ten_records(self):
-        for address, _, args in PostsPagesTests.paginator_url:
-            with self.subTest(address=address):
-                response = PostsPagesTests.authorized_client.get(
-                    reverse(address, kwargs=args)
-                )
-                self.assertEqual(len(response.context['page_obj']), 10)
+class PostsPaginatorViewsTests(TestCase):
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.user = User.objects.create_user(username='Тестовый пользователь')
+        cls.group = Group.objects.create(
+            title='Тестовая группа',
+            slug='test_group'
+        )
+        cls.authorized_client = Client()
+        cls.authorized_client.force_login(cls.user)
+        bilk_post: list = []
+        for i in range(TEST_OF_POST):
+            bilk_post.append(Post(text=f'Тестовый текст {i}',
+                                  group=cls.group,
+                                  author=cls.user))
+        Post.objects.bulk_create(bilk_post)
 
-    def test_second_page_contains_three_records(self):
-        for address, _, args in PostsPagesTests.paginator_url:
-            with self.subTest(address=address):
-                response = PostsPagesTests.authorized_client.get(
-                    reverse(address, kwargs=args) + '?page=2'
-                )
-                self.assertEqual(len(response.context['page_obj']), 3)
+    def test_posts_if_first_page_has_ten_records(self):
+        """Проверка, содержит ли первая страница 10 записей."""
+        response = self.authorized_client.get(reverse('posts:index'))
+        count_posts = len(response.context['page_obj'])
+        self.assertEqual(count_posts, settings.FIRST_OF_POSTS)
+
+    def gen_natural_numbers():
+        cur = 2
+        while True:
+            yield cur
+            cur += 1
+    natural_num_gen = gen_natural_numbers()
+
+    def test_posts_if_second_page_has_three_records(self):
+        """Проверка, содержит ли вторая страница 3 записи."""
+        response = self.authorized_client.get(
+            reverse('posts:index') + f'?page={next(self.natural_num_gen)}'
+        )
+        count_posts = len(response.context['page_obj'])
+        self.assertEqual(count_posts, TEST_OF_POST % settings.FIRST_OF_POSTS)
 
     def test_are_post_with_group_exists_in_appropriate_pages(self):
         for address, _, args in PostsPagesTests.paginator_url:
@@ -267,10 +294,6 @@ class PostsPagesTests(TestCase):
                     self.assertIsNotNone(
                         response.context['page_obj'][number_of_post]
                     )
-
-    def test_post_does_not_exist_in_incorrect_group(self):
-        number_of_post_group = len((PostsPagesTests.group.title.split()))
-        self.assertEqual(number_of_post_group, 1)
 
     def test_image_in_pages_with_posts(self):
         for address, _, args in PostsPagesTests.pages_with_post_images:
