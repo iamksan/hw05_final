@@ -257,6 +257,7 @@ class PostsPagesTests(TestCase):
         )
         count_posts = len(response.context['page_obj'])
         self.assertEqual(count_posts, TEST_OF_POST % settings.FIRST_OF_POSTS)
+
     def test_are_post_with_group_exists_in_appropriate_pages(self):
         for address, _, args in PostsPagesTests.paginator_url:
             with self.subTest(address=address):
