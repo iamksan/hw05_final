@@ -238,6 +238,7 @@ class PostsPagesTests(TestCase):
         is_edit = response.context.get('is_edit')
         self.assertTrue(is_edit)
 
+
 class PostsPaginatorViewsTests(TestCase):
     @classmethod
     def setUpClass(cls):
