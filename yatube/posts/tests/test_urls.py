@@ -1,89 +1,112 @@
-from http import HTTPStatus
 from django.contrib.auth import get_user_model
 from django.test import TestCase, Client
-from ..models import Post, Group
+from django.urls import reverse
+from django.core.cache import cache
+
+from posts.models import Post, Group
 
 User = get_user_model()
 
 
-class StaticURLTests(TestCase):
+class PostURLTests(TestCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        cls.guest_client = Client()
-        cls.user = User.objects.create_user(username='jonh')
-        cls.authorized_client = Client()
-        cls.authorized_client.force_login(cls.user)
+        cls.user = User.objects.create_user(username="TestAuthor")
+        cls.user_not_author = User.objects.create_user(
+            username="TestNotAuthor"
+        )
         cls.group = Group.objects.create(
-            title='smt',
-            slug='test_slug',
-            description='random-group'
+            title="Тестовая группа",
+            slug="testslug",
+            description="Тестовое описание",
         )
         cls.post = Post.objects.create(
-            text='Some Text',
             author=cls.user,
-            group=cls.group
+            text="Тестовая запись",
         )
-        cls.group_slug = cls.group.slug
-        cls.username = cls.user.username
-        cls.post_id = cls.post.id
-        cls.public_urls = (
-            ('/', 'posts/index.html'),
-            (f'/group/{cls.group_slug}/', 'posts/group_list.html'),
-            (f'/profile/{cls.username}/', 'posts/profile.html'),
-            (f'/posts/{cls.post_id}/', 'posts/post_detail.html'),
-        )
-        cls.private_urls = (
-            (f'/posts/{cls.post_id}/edit/', 'posts/create_post.html'),
-            ('/create/', 'posts/create_post.html')
-        )
-        cls.post_url = f'/posts/{StaticURLTests.post_id}/'
-        cls.post_edit_url = f'/posts/{StaticURLTests.post_id}/edit/'
 
-    def test_public_pages(self):
-        for address, _ in StaticURLTests.public_urls:
+        cls.templates_url_names_public = {
+            'posts/index.html': reverse('posts:index'),
+            'posts/group_list.html': reverse(
+                'posts:group_list',
+                kwargs={'slug': cls.group.slug},
+            ),
+            'posts/profile.html': reverse(
+                'posts:profile',
+                kwargs={'username': cls.user.username},
+            ),
+        }
+        cls.templates_url_names_private = {
+            'posts/post_create.html': reverse('posts:post_create')
+        }
+
+        cls.templates_url_names = {
+            'posts/index.html': reverse('posts:index'),
+            'posts/group_list.html': reverse(
+                'posts:group_list',
+                kwargs={'slug': cls.group.slug},
+            ),
+            'posts/profile.html': reverse(
+                'posts:profile',
+                kwargs={'username': cls.user.username},
+            ),
+            'posts/post_create.html': reverse('posts:post_create'),
+        }
+
+    def setUp(self):
+        self.guest_client = Client()
+
+        self.authorized_client = Client()
+        self.authorized_client.force_login(self.user)
+
+        self.authorized_client_not_author = Client()
+        self.authorized_client_not_author.force_login(self.user_not_author)
+
+        cache.clear()
+
+    def test_guest_urls_access(self):
+        """Страницы доступные любому пользователю."""
+        for address in self.templates_url_names_public.values():
             with self.subTest(address=address):
-                response = StaticURLTests.guest_client.get(address)
-                self.assertEqual(response.status_code, HTTPStatus.OK)
+                response = self.guest_client.get(address)
+                self.assertEqual(response.status_code, 200)
 
-    def test_public_urls_uses_correct_template(self):
-        for address, template in StaticURLTests.public_urls:
+    # Проверяем доступность страниц для авторизованного пользователя
+    def test_autorized_urls_access(self):
+        """Страницы доступные авторизованному пользователю."""
+        for address in self.templates_url_names.values():
             with self.subTest(address=address):
-                response = StaticURLTests.guest_client.get(address)
-                self.assertTemplateUsed(response, template)
+                response = self.authorized_client.get(address)
+                self.assertEqual(response.status_code, 200)
 
-    def test_private_urls_uses_correct_template(self):
-        for address, template in StaticURLTests.private_urls:
-            with self.subTest(address=address):
-                response = StaticURLTests.authorized_client.get(address)
-                self.assertTemplateUsed(response, template)
-
-    def test_only_author_can_edit(self):
-        response = StaticURLTests.authorized_client.get(
-            StaticURLTests.post_edit_url
+    # Проверяем редиректы для неавторизованного пользователя
+    def test_list_url_redirect_guest(self):
+        """Страницы перенаправляют анонимного пользователя
+        на страницу логина.
+        """
+        for template, reverse_name in self.templates_url_names_private.items():
+            with self.subTest():
+                response = self.guest_client.get(reverse_name)
+                self.assertEqual(response.status_code, 302)
+        response = self.guest_client.get(
+            reverse(
+                'posts:post_edit',
+                kwargs={'post_id': self.post.pk},
+            )
         )
-        self.assertEqual(response.status_code, HTTPStatus.OK)
+        self.assertEqual(response.status_code, 302)
+    # Редирект для не автора
 
-    def test_not_authorized_user_can_not_edit(self):
-        response = StaticURLTests.guest_client.get(
-            StaticURLTests.post_edit_url
+    def test_redirect_not_author(self):
+        """Редирект при попытке редактирования поста не авром"""
+        response = self.authorized_client_not_author.get(
+            f"/posts/{self.post.pk}/edit/", follow=True
         )
-        self.assertRedirects(response, StaticURLTests.post_url)
+        self.assertRedirects(response, f"/posts/{self.post.pk}/")
+    # Страница не найденна
 
-    def test_only_authorized_can_create_post(self):
-        response = StaticURLTests.authorized_client.get(
-            '/create/'
-        )
-        self.assertEqual(response.status_code, HTTPStatus.OK)
-
-    def test_not_authtorized_can_not_create_post(self):
-        response = StaticURLTests.guest_client.get(
-            '/create/'
-        )
-        self.assertRedirects(response, '/auth/login/?next=/create/')
-
-    def test_404_on_not_existing_page(self):
-        response = StaticURLTests.authorized_client.get(
-            '/not_exists/'
-        )
-        self.assertEqual(response.status_code, HTTPStatus.NOT_FOUND)
+    def test_page_not_found(self):
+        """Страница не найденна."""
+        response = self.guest_client.get("/unexisting_page/")
+        self.assertEqual(response.status_code, 404)

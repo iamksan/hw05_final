@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Войти{% endblock %}
-{% block body_data %}
+{% block content %}
 {% load user_filters %}
   <div class="row justify-content-center">
     <div class="col-md-8 p-5">
@@ -59,13 +59,13 @@
             <button type="submit" class="btn btn-primary">
               Войти
             </button>
-            <a href="{% url 'users:signup' %}" class="btn btn-link">
-              Зарегистрироваться
+            <a href="{% url 'users:password_reset' %}" class="btn btn-link">
+              Забыли пароль?
             </a>
           </div>
           </form>
-        </div> 
-      </div> 
+        </div>
+      </div>
     </div>
-</div> 
+</div>
 {% endblock %}

@@ -1,196 +1,160 @@
-import shutil
-import tempfile
-
-from django.http import Http404
-from django.shortcuts import get_object_or_404
 from http import HTTPStatus
-from django.test import TestCase, Client, override_settings
-from ..models import Post, Group, Comment
-from django.conf import settings
-from django.urls import reverse
-from django.contrib.auth import get_user_model
-from django.core.files.uploadedfile import SimpleUploadedFile
 
+from django.contrib.auth import get_user_model
+from django.test import Client, TestCase
+from django.urls import reverse
+
+from posts.models import Comment, Group, Post
 
 User = get_user_model()
 
-TEMP_MEDIA_ROOT = tempfile.mkdtemp(dir=settings.BASE_DIR)
 
-
-@override_settings(MEDIA_ROOT=TEMP_MEDIA_ROOT)
-class PostCreateFormTest(TestCase):
+class PostCreateFormTests(TestCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        cls.guest_client = Client()
-        cls.user = User.objects.create_user(username='test_user')
-        cls.authorized_client = Client()
-        cls.authorized_client.force_login(cls.user)
+        # Создаем запись в базе данных для проверки сушествующего slug
+        cls.user = User.objects.create_user(username="user")
         cls.group = Group.objects.create(
-            title='test_title',
-            slug='test_slug',
-            description='test_description'
+            title="Тестовая группа",
+            slug="testslug",
+            description="Тестовое описание",
         )
         cls.post = Post.objects.create(
-            text='foo',
+            author=cls.user,
+            text="Тестовая запись",
             group=cls.group,
-            author=cls.user
         )
-        cls.post_id = cls.post.id
-        cls.post_comment_url = (
-            'posts:add_comment',
-            None,
-            {'post_id': cls.post_id}
-        )
-        cls.all_pk = set([post.id for post in Post.objects.all()])
 
-    def tearDown(self):
-        super().tearDown()
-        shutil.rmtree(TEMP_MEDIA_ROOT, ignore_errors=True)
+    def setUp(self):
+        self.guest_client = Client()
 
-    def test_form_post_create(self):
-        posts_count = Post.objects.count()
+        self.authorized_client = Client()
+        self.authorized_client.force_login(self.user)
+
+        self.auth_user_comm = Client()
+        self.auth_user_comm.force_login(self.comm_author)
+
+    def test_create_post(self):
+        """Валидная форма создает запись в Post."""
+
+        post_count = Post.objects.count()
         form_data = {
-            'text': 'test_text',
-            'group': PostCreateFormTest.group.id
+            "text": "Тестовая запись чезез форму",
+            "group": self.group.pk,
         }
-        response = PostCreateFormTest.authorized_client.post(
-            reverse('posts:create'),
-            data=form_data,
-            follow=True
+        response = self.authorized_client.post(
+            reverse("posts:post_create"), data=form_data, follow=True
         )
-        all_pk_with_new_post = set([post.id for post in Post.objects.all()])
-        new_posts_pks = all_pk_with_new_post.difference(
-            PostCreateFormTest.all_pk
-        )
-        self.assertEqual(Post.objects.count(), posts_count + 1)
         self.assertRedirects(
             response,
-            reverse('posts:profile', kwargs={'username': 'test_user'})
+            reverse("posts:profile", kwargs={"username": self.user})
         )
-        for pk in new_posts_pks:
-            self.assertTrue(
-                Post.objects.filter(
-                    id=pk
-                )
-            )
+        self.assertEqual(Post.objects.count(), post_count + 1)
+        post = Post.objects.latest('id')
+        self.assertEqual(post.text, form_data['text'])
+        self.assertEqual(post.author, self.user)
+        self.assertEqual(post.group, self.group)
 
-    def test_form_post_edit(self):
-        post_id = PostCreateFormTest.post.id
-        old_post_text = PostCreateFormTest.post.text
+    def test_edit_post(self):
+        """Валидная форма редактирует запись в Post."""
+
+        post_count = Post.objects.count()
         form_data = {
-            'text': 'new_text',
-            'group': PostCreateFormTest.group.id,
+            "text": "Отредактированная запись.",
+            "group": self.group.pk,
         }
-        PostCreateFormTest.authorized_client.post(
-            reverse('posts:post_edit', kwargs={'post_id': post_id}),
+        response = self.authorized_client.post(
+            reverse("posts:post_edit", kwargs={"post_id": str(self.post.pk)}),
             data=form_data,
-            follow=True
+            follow=True,
         )
-        post = Post.objects.get(id=post_id)
-        new_post_text = post.text
-        self.assertNotEqual(new_post_text, old_post_text)
-
-    def test_not_authorized_user_can_not_edit(self):
-        post_id = PostCreateFormTest.post.id
-        response = PostCreateFormTest.guest_client.get(
-            f'/posts/{post_id}/edit/'
-        )
-        form_data = {
-            'text': 'new_text',
-            'group': PostCreateFormTest.group.id,
-        }
-        PostCreateFormTest.guest_client.post(
-            reverse('posts:post_edit', kwargs={'post_id': post_id}),
-            data=form_data,
-            follow=True
-        )
-        self.assertRedirects(response, f'/posts/{post_id}/')
-        try:
-            new_post = get_object_or_404(Post, text='new_text')
-        except Http404:
-            new_post = 404
-        self.assertEqual(new_post, HTTPStatus.NOT_FOUND)
-
-    def test_not_authtorized_can_not_create_post(self):
-        response = PostCreateFormTest.guest_client.get(
-            '/create/'
-        )
-        form_data = {
-            'text': 'test_text',
-            'group': PostCreateFormTest.group.id
-        }
-        PostCreateFormTest.guest_client.post(
-            reverse('posts:create'),
-            data=form_data,
-            follow=True
-        )
-        self.assertRedirects(response, '/auth/login/?next=/create/')
-        try:
-            new_post = get_object_or_404(Post, text='test_text')
-        except Http404:
-            new_post = 404
-        self.assertEqual(new_post, HTTPStatus.NOT_FOUND)
-
-    def test_creating_post_with_image(self):
-        small_gif = (
-            b'\x47\x49\x46\x38\x39\x61\x02\x00'
-            b'\x01\x00\x80\x00\x00\x00\x00\x00'
-            b'\xFF\xFF\xFF\x21\xF9\x04\x00\x00'
-            b'\x00\x00\x00\x2C\x00\x00\x00\x00'
-            b'\x02\x00\x01\x00\x00\x02\x02\x0C'
-            b'\x0A\x00\x3B'
-        )
-        uploaded = SimpleUploadedFile(
-            name='small.gif',
-            content=small_gif,
-            content_type='image/gif'
-        )
-        form_data = {
-            'text': 'post_with_image',
-            'group': PostCreateFormTest.group.id,
-            'image': uploaded
-        }
-        PostCreateFormTest.authorized_client.post(
-            reverse('posts:create'),
-            data=form_data,
-            follow=True
-        )
-        self.assertTrue(Post.objects.filter(
-            text='post_with_image',
-            group=PostCreateFormTest.group.id,
-            image='posts/small.gif'
-        ).exists())
-
-    def test_only_authorized_used_can_comment(self):
-        form_data = {
-            'text': 'test_text'
-        }
-        PostCreateFormTest.authorized_client.post(
+        self.assertRedirects(
+            response,
             reverse(
-                PostCreateFormTest.post_comment_url[0],
-                kwargs=PostCreateFormTest.post_comment_url[2]
+                "posts:post_detail", kwargs={"post_id": str(self.post.pk)}
             ),
-            data=form_data,
-            follow=True
         )
-        new_comment = Comment.objects.get(text='test_text')
-        self.assertTrue(new_comment)
+        # Проверяем, что не создался новый пост
+        self.assertEqual(Post.objects.count(), post_count)
+        post_edit = Post.objects.get(id=self.post.pk)
+        self.assertEqual(post_edit.text, form_data['text'])
+        self.assertEqual(post_edit.author, self.user)
+        self.assertEqual(post_edit.group, self.group)
 
-    def test_not_authorized_used_can_not_comment(self):
+    def test_guest_new_post(self):
+        # неавторизоанный не может создавать посты
         form_data = {
-            'text': 'test_text'
+            'text': 'Пост от неавторизованного пользователя',
+            'group': self.group.pk
         }
-        PostCreateFormTest.guest_client.post(
-            reverse(
-                PostCreateFormTest.post_comment_url[0],
-                kwargs=PostCreateFormTest.post_comment_url[2]
-            ),
+        response = self.guest_client.post(
+            reverse('posts:post_create'),
             data=form_data,
-            follow=True
+            follow=True,
         )
-        try:
-            new_comment = get_object_or_404(Comment, text='test_text')
-        except Http404:
-            new_comment = None
-        self.assertIsNone(new_comment)
+        redirect = reverse('login') + '?next=' + reverse('posts:post_create')
+        self.assertFalse(Post.objects.filter(
+            text='Пост от неавторизованного пользователя').exists())
+        self.assertRedirects(response, redirect)
+
+    def test_authorized_user_create_comment(self):
+        """Проверка создания коментария авторизированным клиентом."""
+        comments_count = Comment.objects.count()
+        post = Post.objects.create(
+            text='Текст поста для редактирования',
+            author=self.post_author)
+        form_data = {'text': 'Тестовый коментарий'}
+        response = self.auth_user_comm.post(
+            reverse(
+                'posts:add_comment',
+                kwargs={'post_id': post.id}),
+            data=form_data,
+            follow=True)
+        comment = Comment.objects.latest('id')
+        self.assertEqual(Comment.objects.count(), comments_count + 1)
+        self.assertEqual(comment.text, form_data['text'])
+        self.assertEqual(comment.author, self.comm_author)
+        self.assertEqual(comment.post_id, post.id)
+        self.assertRedirects(
+            response, reverse('posts:post_detail', args={post.id}))
+
+    def test_authorized_user_create_comment(self):
+        """Проверка создания коментария авторизированным клиентом."""
+        comments_count = Comment.objects.count()
+        post = Post.objects.create(
+            text='Текст поста для редактирования',
+            author=self.post_author)
+        form_data = {'text': 'Тестовый коментарий'}
+        response = self.auth_user_comm.post(
+            reverse(
+                'posts:add_comment',
+                kwargs={'post_id': post.id}),
+            data=form_data,
+            follow=True)
+        comment = Comment.objects.latest('id')
+        self.assertEqual(Comment.objects.count(), comments_count + 1)
+        self.assertEqual(comment.text, form_data['text'])
+        self.assertEqual(comment.author, self.comm_author)
+        self.assertEqual(comment.post_id, post.id)
+        self.assertRedirects(
+            response, reverse('posts:post_detail', args={post.id}))
+
+    def test_nonauthorized_user_create_comment(self):
+        """Проверка создания комментария не авторизированным пользователем."""
+        comments_count = Comment.objects.count()
+        post = Post.objects.create(
+            text='Текст поста для редактирования',
+            author=self.post_author)
+        form_data = {'text': 'Тестовый коментарий'}
+        response = self.guest_user.post(
+            reverse(
+                'posts:add_comment',
+                kwargs={'post_id': post.id}),
+            data=form_data,
+            follow=True)
+        redirect = reverse('login') + '?next=' + reverse(
+            'posts:add_comment', kwargs={'post_id': post.id})
+        self.assertEqual(response.status_code, HTTPStatus.OK)
+        self.assertEqual(Comment.objects.count(), comments_count)
+        self.assertRedirects(response, redirect)

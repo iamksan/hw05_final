@@ -1,9 +1,9 @@
 from django.views.generic.base import TemplateView
 
 
-class AuthorStaticPage(TemplateView):
-    template_name = 'about/author.html'
+class AboutAuthorView(TemplateView):
+    template_name = "about/author.html"
 
 
-class TechStaticPage(TemplateView):
-    template_name = 'about/tech.html'
+class AboutTechView(TemplateView):
+    template_name = "about/tech.html"
