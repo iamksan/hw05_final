@@ -28,8 +28,11 @@ class Post(models.Model):
         verbose_name="Текст записи", help_text="Введите текст поста"
     )
     pub_date = models.DateTimeField(
-        auto_now_add=True, verbose_name="Дата публикации"
+        'Дата публикации',
+        auto_now_add=True,
+        db_index=True
     )
+
     author = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
@@ -62,43 +65,35 @@ class Comment(models.Model):
     post = models.ForeignKey(
         Post,
         on_delete=models.CASCADE,
-        related_name="comments",
-        verbose_name="Пост",
+        related_name='comments'
     )
     author = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
-        related_name="comments",
-        verbose_name="Автор комментария",
+        related_name='comments'
     )
-    text = models.TextField(
-        verbose_name="Текст комментария", help_text="Введите текст комментария"
-    )
+    text = models.TextField()
+    created = models.DateTimeField('pub_date', auto_now_add=True)
 
-    class Meta:
-        ordering = ("-created",)
-        verbose_name = "Комментарий"
-        verbose_name_plural = "Комментарии"
-
-    def __str__(self) -> str:
-        return self.text[:15]
+    def __str__(self):
+        return self.text
 
 
 class Follow(models.Model):
     user = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
-        related_name='follower',
-        verbose_name='Пользователь')
+        related_name='follower'
+    )
     author = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
-        related_name='following',
-        verbose_name='Автор')
+        related_name='following'
+    )
 
-    class Meta:
-        verbose_name_plural = 'Подписки'
-        verbose_name = 'Подписка'
-
-    def __str__(self):
-        return f'{self.user} подписался на {self.author}'
+    def follow_can_be_created(user, author):
+        following_exists = Follow.objects.filter(
+            author=author,
+            user=user
+        ).exists()
+        return (user != author and not following_exists)

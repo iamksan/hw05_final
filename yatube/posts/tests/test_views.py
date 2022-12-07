@@ -3,10 +3,9 @@ from django.contrib.auth import get_user_model
 from django.test import Client, TestCase
 from django.urls import reverse
 from django.conf import settings
-from django.core.cache import cache
 from django.core.files.uploadedfile import SimpleUploadedFile
 
-from ..models import Follow, Group, Post
+from ..models import Group, Post
 
 TEST_OF_POST: int = 13
 User = get_user_model()
@@ -30,15 +29,16 @@ class PostsViewsTests(TestCase):
             b'\x02\x00\x01\x00\x00\x02\x02\x0C'
             b'\x0A\x00\x3B'
         )
+        cls.image = SimpleUploadedFile(
+            name='small.gif',
+            content=small_gif,
+            content_type='image/gif'
+        )
         cls.post = Post.objects.create(
             text='Привет!',
             author=cls.user,
             group=cls.group,
-            image=SimpleUploadedFile(
-                name='small.gif',
-                content=small_gif,
-                content_type='image/gif'
-            )
+            image=cls.image,
         )
 
         cls.templates_pages_names = {
@@ -68,6 +68,7 @@ class PostsViewsTests(TestCase):
             self.assertEqual(post.text, self.post.text)
             self.assertEqual(post.author, self.post.author)
             self.assertEqual(post.group.id, self.post.group.id)
+            self.assertEqual(post.image, self.post.image)
 
     def test_posts_pages_use_correct_template(self):
         """Проверка, использует ли адрес URL соответствующий шаблон."""
@@ -117,7 +118,7 @@ class PostsViewsTests(TestCase):
         }
         for value, expected in form_fields.items():
             with self.subTest(value=value):
-                form_field = response.context['form'].fields[value]
+                form_field = response.context['form'].fields.get(value)
                 self.assertIsInstance(form_field, expected)
 
     def test_posts_context_post_edit_template(self):
@@ -180,22 +181,6 @@ class PostsViewsTests(TestCase):
         self.posts_check_all_fields(post)
         self.assertEqual(post.group, self.group)
 
-    def test_cache_index_page(self):
-        """Проверка работы кеша"""
-        post = Post.objects.create(
-            text='Пост под кеш',
-            author=self.user)
-        content_add = self.authorized_client.get(
-            reverse('posts:index')).content
-        post.delete()
-        content_delete = self.authorized_client.get(
-            reverse('posts:index')).content
-        self.assertEqual(content_add, content_delete)
-        cache.clear()
-        content_cache_clear = self.authorized_client.get(
-            reverse('posts:index')).content
-        self.assertNotEqual(content_add, content_cache_clear)
-
 
 class PostsPaginatorViewsTests(TestCase):
     @classmethod
@@ -235,71 +220,3 @@ class PostsPaginatorViewsTests(TestCase):
         )
         count_posts = len(response.context['page_obj'])
         self.assertEqual(count_posts, TEST_OF_POST % settings.FIRST_OF_POSTS)
-
-
-class FollowViewsTest(TestCase):
-    @classmethod
-    def setUpClass(cls):
-        super().setUpClass()
-        cls.post_autor = User.objects.create(
-            username='post_autor',
-        )
-        cls.post_follower = User.objects.create(
-            username='post_follower',
-        )
-        cls.post = Post.objects.create(
-            text='Подпишись на меня',
-            author=cls.post_autor,
-        )
-
-    def setUp(self):
-        cache.clear()
-        self.author_client = Client()
-        self.author_client.force_login(self.post_follower)
-        self.follower_client = Client()
-        self.follower_client.force_login(self.post_autor)
-
-    def test_follow_on_user(self):
-        """Проверка подписки на пользователя."""
-        count_follow = Follow.objects.count()
-        self.follower_client.post(
-            reverse(
-                'posts:profile_follow',
-                kwargs={'username': self.post_follower}))
-        follow = Follow.objects.all().latest('id')
-        self.assertEqual(Follow.objects.count(), count_follow + 1)
-        self.assertEqual(follow.author_id, self.post_follower.id)
-        self.assertEqual(follow.user_id, self.post_autor.id)
-
-    def test_unfollow_on_user(self):
-        """Проверка отписки от пользователя."""
-        Follow.objects.create(
-            user=self.post_autor,
-            author=self.post_follower)
-        count_follow = Follow.objects.count()
-        self.follower_client.post(
-            reverse(
-                'posts:profile_unfollow',
-                kwargs={'username': self.post_follower}))
-        self.assertEqual(Follow.objects.count(), count_follow - 1)
-
-    def test_follow_on_authors(self):
-        """Проверка записей у тех кто подписан."""
-        post = Post.objects.create(
-            author=self.post_autor,
-            text="Подпишись на меня")
-        Follow.objects.create(
-            user=self.post_follower,
-            author=self.post_autor)
-        response = self.author_client.get(
-            reverse('posts:follow_index'))
-        self.assertIn(post, response.context['page_obj'].object_list)
-
-    def test_notfollow_on_authors(self):
-        """Проверка записей у тех кто не подписан."""
-        post = Post.objects.create(
-            author=self.post_autor,
-            text="Подпишись на меня")
-        response = self.author_client.get(
-            reverse('posts:follow_index'))
-        self.assertNotIn(post, response.context['page_obj'].object_list)

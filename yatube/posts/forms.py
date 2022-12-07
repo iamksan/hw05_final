@@ -8,12 +8,10 @@ class PostForm(forms.ModelForm):
 
     class Meta:
         model = Post
-        fields = ("text", "group", "image")
+        fields = ('group', 'text', 'image')
 
 
 class CommentForm(forms.ModelForm):
-    """Форма добавления комментария."""
-
     class Meta:
         model = Comment
-        fields = ["text"]
+        fields = ('text', )

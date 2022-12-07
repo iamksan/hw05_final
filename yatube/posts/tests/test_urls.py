@@ -1,7 +1,6 @@
 from django.contrib.auth import get_user_model
 from django.test import TestCase, Client
 from django.urls import reverse
-from django.core.cache import cache
 
 from posts.models import Post, Group
 
@@ -62,8 +61,6 @@ class PostURLTests(TestCase):
 
         self.authorized_client_not_author = Client()
         self.authorized_client_not_author.force_login(self.user_not_author)
-
-        cache.clear()
 
     def test_guest_urls_access(self):
         """Страницы доступные любому пользователю."""
