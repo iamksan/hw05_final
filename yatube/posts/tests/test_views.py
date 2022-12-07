@@ -68,7 +68,6 @@ class PostsViewsTests(TestCase):
             self.assertEqual(post.text, self.post.text)
             self.assertEqual(post.author, self.post.author)
             self.assertEqual(post.group.id, self.post.group.id)
-            self.assertEqual(post.image, self.post.image)
 
     def test_posts_pages_use_correct_template(self):
         """Проверка, использует ли адрес URL соответствующий шаблон."""
@@ -84,9 +83,9 @@ class PostsViewsTests(TestCase):
         Появляется ли пост, при создании на главной странице.
         """
         response = self.authorized_client.get(reverse('posts:index'))
-        last_post = response.context['page_obj'][0]
-        self.posts_check_all_fields(last_post)
-        self.assertEqual(last_post, self.post)
+        test_post = response.context['page_obj'][0]
+        self.posts_check_all_fields(test_post)
+        self.assertEqual(test_post, self.post)
 
     def test_posts_context_group_list_template(self):
         """
