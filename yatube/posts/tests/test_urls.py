@@ -26,31 +26,31 @@ class PostURLTests(TestCase):
         )
 
         cls.templates_url_names_public = {
-            'posts/index.html': reverse('posts:index'),
-            'posts/group_list.html': reverse(
-                'posts:group_list',
-                kwargs={'slug': cls.group.slug},
+            "posts/index.html": reverse("posts:index"),
+            "posts/group_list.html": reverse(
+                "posts:group_list",
+                kwargs={"slug": cls.group.slug},
             ),
-            'posts/profile.html': reverse(
-                'posts:profile',
-                kwargs={'username': cls.user.username},
+            "posts/profile.html": reverse(
+                "posts:profile",
+                kwargs={"username": cls.user.username},
             ),
         }
         cls.templates_url_names_private = {
-            'posts/post_create.html': reverse('posts:post_create')
+            "posts/post_create.html": reverse("posts:post_create")
         }
 
         cls.templates_url_names = {
-            'posts/index.html': reverse('posts:index'),
-            'posts/group_list.html': reverse(
-                'posts:group_list',
-                kwargs={'slug': cls.group.slug},
+            "posts/index.html": reverse("posts:index"),
+            "posts/group_list.html": reverse(
+                "posts:group_list",
+                kwargs={"slug": cls.group.slug},
             ),
-            'posts/profile.html': reverse(
-                'posts:profile',
-                kwargs={'username': cls.user.username},
+            "posts/profile.html": reverse(
+                "posts:profile",
+                kwargs={"username": cls.user.username},
             ),
-            'posts/post_create.html': reverse('posts:post_create'),
+            "posts/post_create.html": reverse("posts:post_create"),
         }
 
     def setUp(self):
@@ -93,7 +93,6 @@ class PostURLTests(TestCase):
             )
         )
         self.assertEqual(response.status_code, 302)
-    # Редирект для не автора
 
     def test_redirect_not_author(self):
         """Редирект при попытке редактирования поста не авром"""
@@ -101,7 +100,6 @@ class PostURLTests(TestCase):
             f"/posts/{self.post.pk}/edit/", follow=True
         )
         self.assertRedirects(response, f"/posts/{self.post.pk}/")
-    # Страница не найденна
 
     def test_page_not_found(self):
         """Страница не найденна."""

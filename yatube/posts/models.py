@@ -49,7 +49,7 @@ class Post(models.Model):
         help_text="Выберите группу",
     )
     image = models.ImageField(
-        'Картинка',
+        verbose_name='Картинка',
         upload_to='posts/',
         blank=True
     )
@@ -94,7 +94,7 @@ class Follow(models.Model):
     class Meta:
         constraints = [
             models.UniqueConstraint(
-                fields=['user', 'author'],
-                name='unique_following',
+                fields=["user", "author"],
+                name="unique_following",
             ),
         ]

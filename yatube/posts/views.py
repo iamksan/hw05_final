@@ -17,7 +17,7 @@ def index(request):
 def group_posts(request, slug):
     group = get_object_or_404(Group, slug=slug)
     template = 'posts/group_list.html'
-    post_list = Post.objects.all()
+    post_list = Post.objects.select_related('group')
     page_obj = paginations(request, post_list)
     context = {
         'page_obj': page_obj,
@@ -48,7 +48,7 @@ def post_detail(request, post_id):
 
     post = get_object_or_404(Post, pk=post_id)
     form = CommentForm()
-    comments = Comment.objects.filter(post=post)
+    comments = Comment.objects.select_related('post')
     template = "posts/post_detail.html"
     context = {
         "post": post,
@@ -116,15 +116,6 @@ def add_comment(request, post_id):
 
 
 @login_required
-def follow_can_be_created(user, author):
-    following_exists = Follow.objects.filter(
-        author=author,
-        user=user
-    ).exists()
-    return (user != author and not following_exists)
-
-
-@login_required
 def follow_index(request):
     template = "posts/follow.html"
     post_list = Post.objects.filter(author__following__user=request.user)
@@ -170,15 +161,8 @@ def profile_follow(request, username):
 def profile_unfollow(request, username):
     author = get_object_or_404(User, username=username)
     if author != request.user:
-        Follow.objects.create(
+        Follow.objects.get(
             user=request.user,
             author=author
-        )
-    return redirect("posts:profile", username)
-
-
-@login_required
-def profile_unfollow(request, username):
-    author = get_object_or_404(User, username=username)
-    Follow.objects.get(user=request.user, author=author).delete()
+        ).delete()
     return redirect("posts:profile", username)

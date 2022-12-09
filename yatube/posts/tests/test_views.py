@@ -212,8 +212,8 @@ class PostsPaginatorViewsTests(TestCase):
             cur += 1
     natural_num_gen = gen_natural_numbers()
 
-    def test_posts_if_second_page_has_three_records(self):
-        """Проверка, содержит ли вторая страница 3 записи."""
+    def test_paginator_on_pages(self):
+        """Проверка, содержит ли следующая страница 3 записи."""
         response = self.authorized_client.get(
             reverse('posts:index') + f'?page={next(self.natural_num_gen)}'
         )
