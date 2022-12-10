@@ -34,10 +34,14 @@ def profile(request, username):
     )
     posts_count = post_list.count()
     page_obj = paginations(request, post_list)
+    following = request.user.is_authenticated
+    if following:
+        following = profile.following.filter(user=request.user).exists()
     context = {
         'profile': profile,
         'posts_count': posts_count,
         'page_obj': page_obj,
+        'following': following
     }
     template = 'posts/profile.html'
     return render(request, template, context)
@@ -124,15 +128,6 @@ def follow_index(request):
         "page_obj": page_obj,
     }
     return render(request, template, context)
-
-
-@login_required
-def follow_can_be_created(user, author):
-    following_exists = Follow.objects.filter(
-        author=author,
-        user=user
-    ).exists()
-    return (user != author and not following_exists)
 
 
 @login_required

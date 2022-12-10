@@ -51,6 +51,7 @@ class PostURLTests(TestCase):
                 kwargs={"username": cls.user.username},
             ),
             "posts/post_create.html": reverse("posts:post_create"),
+            "posts/follow.html": reverse("posts:follow_index")
         }
 
     def setUp(self):
